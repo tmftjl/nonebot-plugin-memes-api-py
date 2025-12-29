@@ -29,7 +29,7 @@ class MultipleImageConfig(BaseModel):
 
 
 class Config(BaseModel):
-    meme_generator_base_url: str = "http://127.0.0.1:2234"
+    meme_generator_base_url: str = "http://127.0.0.1:2233"
     memes_command_prefixes: Optional[list[str]] = None
     memes_disabled_list: list[str] = []
     memes_check_resources_on_startup: bool = True
