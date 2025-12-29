@@ -11,7 +11,7 @@ from nonebot.log import logger
 from ..manager import meme_manager
 from ..request import MemeInfo
 
-import pycurl
+
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 import hashlib
@@ -79,24 +79,14 @@ def load_sensitive_words(file_path="../ban_word_list.txt"):
     except Exception:
         return []
     
-def _download_pycurl(url: str) -> bytes:
-    buffer = BytesIO()
-    c = pycurl.Curl()
-    c.setopt(c.URL, url)
-    c.setopt(c.WRITEDATA, buffer)
-    c.setopt(c.FOLLOWLOCATION, True)
-    c.setopt(c.TIMEOUT, 20)
-    c.perform()
-    status_code = c.getinfo(pycurl.RESPONSE_CODE)
-    c.close()
-    if status_code != 200:
-        raise Exception(f"HTTP {status_code}")
-    return buffer.getvalue()
-    
+import httpx
+
 async def image_fetch_pucurl(url) -> Optional[bytes]:
     try:
-        content = _download_pycurl(url)
-        return content  # type: ignore
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=20, follow_redirects=True)
+            resp.raise_for_status()
+            return resp.content
     except Exception as e:
         logger.warning(f"❌ 下载图片失败: {url}, 错误: {e}")
         return None
