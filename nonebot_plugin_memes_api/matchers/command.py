@@ -11,6 +11,7 @@ from nonebot import get_driver
 from nonebot.adapters import Bot, Event
 from nonebot.exception import AdapterException
 from nonebot.log import logger
+from nonebot.message import event_preprocessor
 from nonebot.matcher import Matcher
 from nonebot.typing import T_State
 from nonebot_plugin_alconna import (
@@ -245,6 +246,62 @@ matchers: list[type[Matcher]] = []
 prefixes = list(get_driver().config.command_start)
 if (meme_prefixes := memes_config.memes_command_prefixes) is not None:
     prefixes = meme_prefixes
+
+
+@event_preprocessor
+async def _(event: Event):
+    try:
+        msg = event.get_message()
+    except Exception:
+        return
+
+    if not msg or len(msg) < 2:
+        return
+
+    if msg[0].type != "at":
+        return
+
+    if msg[1].type != "text":
+        return
+
+    text = msg[1].data.get("text", "")
+    if not text:
+        return
+
+    clean_text = text.lstrip()
+
+    # Check prefixes
+    current_prefixes = prefixes + [f"gif{p}" for p in prefixes]
+    matched_prefix = next(
+        (p for p in current_prefixes if clean_text.startswith(p)), None
+    )
+    if not matched_prefix:
+        return
+
+    # Check keyword
+    cmd_part = clean_text[len(matched_prefix) :].lstrip()
+    cmd_key = cmd_part.split()[0] if cmd_part else ""
+
+    if not cmd_key:
+        return
+
+    # Check if this keyword belongs to any meme
+    is_meme = False
+    for meme in meme_manager.get_memes():
+        if cmd_key in meme.keywords:
+            is_meme = True
+            break
+        for shortcut in meme.shortcuts:
+            if shortcut.key == cmd_key:
+                is_meme = True
+                break
+        if is_meme:
+            break
+
+    if is_meme:
+        # Swap
+        at_seg = msg.pop(0)
+        msg.append(at_seg)
 
 
 def create_matcher(meme: MemeInfo):
