@@ -184,8 +184,14 @@ async def handle_params(
     images: list[Image] = []
     users: list[User] = []
 
+    # 先检查是否有实际图片
+    has_actual_image = any(isinstance(seg, Image) for seg in meme_params)
+
     for msg_seg in meme_params:
         if isinstance(msg_seg, At):
+            # 如果已经有实际图片,则跳过At转头像的逻辑
+            if has_actual_image:
+                continue
             try:
                 user = None
                 if session.scene.type > 0:
