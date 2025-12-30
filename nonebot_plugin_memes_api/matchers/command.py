@@ -324,7 +324,7 @@ def create_matcher(meme: MemeInfo):
         ),
         aliases=set(meme.keywords[1:]),
         block=False,
-        priority=12,
+        priority=3,
         extensions=[ReplyMergeExtension()],
     )
     for shortcut in meme.shortcuts:
@@ -346,7 +346,7 @@ def create_matcher(meme: MemeInfo):
         ),
         aliases=set(meme.keywords[1:]),
         block=False,
-        priority=13,
+        priority=3,
         extensions=[ReplyMergeExtension()],
     )
     for shortcut in meme.shortcuts:
@@ -542,7 +542,7 @@ def destroy_matchers():
 random_matcher = on_alconna(
     Alconna([prefix + "随机表情" for prefix in prefixes], arg_meme_params),
     block=False,
-    priority=10,
+    priority=3,
     use_cmd_start=True,
     extensions=[ReplyMergeExtension()],
 )
@@ -599,7 +599,7 @@ async def _(
         show_info=memes_config.memes_random_meme_show_info,
     )
 
-refresh_matcher = on_alconna("更新表情", aliases={"刷新表情"}, permission=SUPERUSER, block=True, priority=11)
+refresh_matcher = on_alconna("更新表情", aliases={"刷新表情"}, permission=SUPERUSER, block=True, priority=3)
 
 
 @refresh_matcher.handle()
