@@ -45,7 +45,8 @@ from PIL import Image as PILImage
 
 # 增加 Alconna 命令数量上限以支持大量表情
 # 每个表情创建 2 个 matcher（普通 + gif），所以需要足够的空间
-alc_config.command_max_count += 2000
+# 450+ 表情 × 2 = 900+ 命令，需要足够大的空间
+alc_config.command_max_count = 10000  # 直接设置为 10000，而不是增加
 
 
 import io
