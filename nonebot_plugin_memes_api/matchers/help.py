@@ -107,9 +107,9 @@ async def _(user_id: UserId, session: Uninfo):
     msg = Text(
         f"触发方式：关键词{memes_config.memes_command_prefixes} 表情名 图片/文字/@某人\n"
         f"例：{memes_config.memes_command_prefixes[0]}卡提举牌 抽我\n"
-        "发送"表情详情+关键词"查看预览\n"
-        "群管可 禁用/启动表情+表情名\n"
-        "目前支持的表情列表："
+        f"发送“表情详情+关键词”查看预览\n"
+        f"群管可 禁用/启动表情+表情名\n"
+        f"目前支持的表情列表："
     ) + Image(raw=img)
     await msg.send()
 
