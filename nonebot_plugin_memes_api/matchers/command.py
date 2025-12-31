@@ -37,6 +37,7 @@ from nonebot_plugin_waiter import waiter
 from ..config import memes_config, ban_path, use_gif, notice_prob, use_ban_word
 from ..exception import MemeGeneratorException
 from ..manager import meme_manager
+from ..protection import protection_manager
 from ..recorder import record_meme_generation
 from ..request import MemeInfo, generate_meme
 from ..utils import NetworkError
@@ -379,6 +380,32 @@ def create_matcher(meme: MemeInfo):
             meme.params_type.min_texts > 0 and len(texts) == 0
         ):
             texts = meme.params_type.default_texts
+
+        # 白名单保护功能：如果 @ 了白名单用户，反转目标
+        if protection_manager.is_protected(meme.key):
+            # 检查 users 中是否有白名单用户
+            whitelist_indices = [
+                i for i, user in enumerate(users)
+                if protection_manager.is_in_whitelist(user.user_id)
+            ]
+
+            if whitelist_indices:
+                # 对于单图表情，将白名单用户替换为发送者
+                if meme.params_type.min_images == 1 and meme.params_type.max_images == 1:
+                    if whitelist_indices[0] < len(images):
+                        # 用发送者的头像替换白名单用户
+                        sender_user = session.user
+                        if image_url := sender_user.avatar:
+                            images[whitelist_indices[0]] = Image(url=image_url)
+                        if (member := session.member) and member.nick:
+                            sender_user.nick = member.nick
+                        users[whitelist_indices[0]] = sender_user
+
+                # 对于双图表情，反转顺序
+                elif meme.params_type.min_images == 2 and meme.params_type.max_images == 2:
+                    if len(images) == 2 and len(users) == 2:
+                        images.reverse()
+                        users.reverse()
 
         @waiter(waits=["message"], keep_session=True)
         async def get_texts(uni_msg: UniMsg):
