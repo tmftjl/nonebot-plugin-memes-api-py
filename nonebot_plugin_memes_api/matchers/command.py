@@ -383,13 +383,17 @@ def create_matcher(meme: MemeInfo):
 
         # 白名单保护功能：如果 @ 了白名单用户，反转目标
         if protection_manager.is_protected(meme.key):
+            logger.info(f"表情 {meme.key} 在保护列表中")
             # 检查 users 中是否有白名单用户
             whitelist_indices = [
                 i for i, user in enumerate(users)
                 if protection_manager.is_in_whitelist(user.id)
             ]
+            logger.info(f"用户列表: {[user.id for user in users]}")
+            logger.info(f"白名单索引: {whitelist_indices}")
 
             if whitelist_indices:
+                logger.info(f"检测到白名单用户，执行保护逻辑")
                 # 对于单图表情，将白名单用户替换为发送者
                 if meme.params_type.min_images == 1 and meme.params_type.max_images == 1:
                     if whitelist_indices[0] < len(images):
@@ -404,6 +408,7 @@ def create_matcher(meme: MemeInfo):
                 # 对于双图表情，反转顺序
                 elif meme.params_type.min_images == 2 and meme.params_type.max_images == 2:
                     if len(images) == 2 and len(users) == 2:
+                        logger.info(f"双图表情，执行反转")
                         images.reverse()
                         users.reverse()
 

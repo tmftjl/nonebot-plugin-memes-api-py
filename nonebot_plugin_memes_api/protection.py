@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from nonebot import get_driver
 from nonebot.compat import model_dump, type_validate_python
 from nonebot.log import logger
 from pydantic import BaseModel
@@ -53,8 +54,16 @@ class ProtectionManager:
         return False
 
     def is_in_whitelist(self, user_id: str) -> bool:
-        """检查是否在白名单中"""
-        return user_id in self.__config.whitelist_ids
+        """检查是否在白名单中（主人默认在白名单）"""
+        # 主人默认在白名单中
+        superusers = get_driver().config.superusers
+        logger.debug(f"检查用户 {user_id} 是否在白名单，superusers: {superusers}, whitelist: {self.__config.whitelist_ids}")
+        if user_id in superusers:
+            logger.debug(f"用户 {user_id} 是主人")
+            return True
+        result = user_id in self.__config.whitelist_ids
+        logger.debug(f"用户 {user_id} 在配置白名单中: {result}")
+        return result
 
     def is_protected(self, meme_key: str) -> bool:
         """检查表情是否需要保护"""
