@@ -2,6 +2,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 
+from nonebot.matcher import Matcher
 from nonebot_plugin_alconna import Image, Text, on_alconna
 from nonebot_plugin_localstore import get_cache_dir
 from nonebot_plugin_uninfo import Uninfo
@@ -17,7 +18,14 @@ memes_cache_dir = get_cache_dir("nonebot_plugin_memes_api")
 
 help_matcher = on_alconna(
     "表情包制作",
-    aliases={"表情列表", "头像表情包", "文字表情包", "表情帮助"},
+    aliases={"表情列表", "头像表情包", "文字表情包"},
+    block=True,
+    priority=11,
+    use_cmd_start=True,
+)
+
+usage_help_matcher = on_alconna(
+    "表情帮助",
     block=True,
     priority=11,
     use_cmd_start=True,
@@ -104,3 +112,44 @@ async def _(user_id: UserId, session: Uninfo):
         "目前支持的表情列表："
     ) + Image(raw=img)
     await msg.send()
+
+
+@usage_help_matcher.handle()
+async def _(matcher: Matcher):
+    memes_prefix = memes_config.memes_command_prefixes[0] if memes_config.memes_command_prefixes else ""
+
+    help_text = (
+        "- 表情列表\n"
+        "发送 “表情包制作” 查看表情列表\n"
+        "- 表情详情\n"
+        "发送 “表情详情 + 表情名/关键词” 查看表情详细信息和表情预览\n"
+        "- 表情搜索\n"
+        "发送 “表情搜索 + 关键词” 查找相关的表情\n"
+        "- 表情包开关\n"
+        "- “超级用户” 和 “管理员” 可以启用或禁用某些表情包\n"
+        "发送 启用表情/禁用表情 表情名/关键词，如：禁用表情 摸\n"
+        "- “超级用户” 可以设置某个表情包的管控模式（黑名单/白名单）\n"
+        "发送 全局启用表情 表情名/关键词 可将表情设为黑名单模式；\n"
+        "发送 全局禁用表情 表情名/关键词 可将表情设为白名单模式；\n"
+        "- 白名单保护（仅超级用户）\n"
+        "发送 “添加保护@用户” 或 “添加保护<QQ号>” 添加保护白名单\n"
+        "发送 “移除保护@用户” 或 “移除保护<QQ号>” 移除保护白名单\n"
+        "发送 “保护表情<表情名>” 添加保护表情\n"
+        "发送 “取消保护表情<表情名>” 移除保护表情\n"
+        "发送 “保护列表” 查看保护配置\n"
+        "- 表情使用\n"
+        f"发送 “{memes_prefix}关键词 + 图片/文字” 制作表情\n"
+        "可使用 “自己”、“@某人” 获取指定用户的头像作为图片\n"
+        "可使用 “@ + 用户id” 指定任意用户获取头像，如 “摸 @114514”\n"
+        "可将回复中的消息作为文字和图片的输入\n"
+        "- 随机表情\n"
+        "发送 “随机表情 + 图片/文字” 可随机制作表情\n"
+        "随机范围为 图片/文字 数量符合要求的表情\n"
+        "- 表情调用统计\n"
+        "发送 “[我的][全局]<时间段>表情调用统计 [表情名]” 获取表情调用次数统计图\n"
+        "“我的”、“全局”、<时间段>、“表情名” 均为可选项\n"
+        "<时间段> 的关键词有：日、本日、周、本周、月、本月、年、本年\n"
+        "如：“我的今日表情调用统计 petpet”"
+    )
+
+    await matcher.finish(help_text)
