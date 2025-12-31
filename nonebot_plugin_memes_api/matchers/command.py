@@ -34,7 +34,7 @@ from nonebot_plugin_alconna.uniseg.tools import image_fetch
 from nonebot_plugin_uninfo import Interface, QryItrface, Session, Uninfo, User
 from nonebot_plugin_waiter import waiter
 
-from ..config import memes_config, ban_path, use_gif, resize_image, resize_image_size, notice_prob, use_ban_word
+from ..config import memes_config, ban_path, use_gif, notice_prob, use_ban_word
 from ..exception import MemeGeneratorException
 from ..manager import meme_manager
 from ..recorder import record_meme_generation
@@ -44,9 +44,8 @@ from .utils import UserId, load_sensitive_words, image_fetch_pucurl
 from PIL import Image as PILImage
 
 # 增加 Alconna 命令数量上限以支持大量表情
-# 每个表情创建 2 个 matcher（普通 + gif），所以需要足够的空间
-# 450+ 表情 × 2 = 900+ 命令，需要足够大的空间
-alc_config.command_max_count = 10000  # 直接设置为 10000，而不是增加
+# 450+ 表情需要足够大的空间
+alc_config.command_max_count = 10000
 
 
 import io
@@ -87,21 +86,7 @@ def to_gif(img_bytes: bytes) -> bytes:
     except Exception:
         logger.error("转换图片为 GIF 失败", exc_info=True)
         return img_bytes
-    
-def resize_image(bytes: bytes, max_size: int = 360) -> bytes:
-    try:
-        img = PILImage.open(io.BytesIO(bytes))
-        if img.format == "GIF":
-            return bytes
-        if img.size[0] > max_size or img.size[1] > max_size:
-            img.thumbnail((max_size, max_size), PILImage.LANCZOS)
-        output = io.BytesIO()
-        img.save(output, format="WEBP")
-        return output.getvalue()
-    except Exception:
-        logger.error("调整图片大小失败", exc_info=True)
-        return bytes
-    
+
 async def process(
     bot: Bot,
     event: Event,
@@ -114,7 +99,6 @@ async def process(
     users: list[User],
     args: dict[str, Any] = {},
     show_info: bool = False,
-    force_gif: bool = False,
 ):
     image_contents: list[bytes] = []
     
@@ -161,10 +145,8 @@ async def process(
     if show_info:
         keywords = "、".join([f'"{keyword}"' for keyword in meme.keywords])
         msg += f"关键词：{keywords}"
-    if use_gif or force_gif:
+    if use_gif:
         result = to_gif(result)
-    elif resize_image:
-        result = resize_image(result, resize_image_size)
     msg += UniMessage.image(raw=result)
     
     if random.random() < notice_prob:
@@ -281,9 +263,8 @@ async def _(event: Event):
     clean_text = text.lstrip()
 
     # Check prefixes
-    current_prefixes = prefixes + [f"gif{p}" for p in prefixes]
     matched_prefix = next(
-        (p for p in current_prefixes if clean_text.startswith(p)), None
+        (p for p in prefixes if clean_text.startswith(p)), None
     )
     if not matched_prefix:
         return
@@ -346,28 +327,6 @@ def create_matcher(meme: MemeInfo):
         )
     matchers.append(meme_matcher)
 
-    meme_matcher_gif = on_alconna(
-        Alconna(
-            ['gif' + prefix for prefix in prefixes],
-            meme.keywords[0],
-            *options,
-            arg_meme_params,
-            meta=CommandMeta(keep_crlf=True, compact=True, fuzzy_match=True),
-        ),
-        aliases=set(meme.keywords[1:]),
-        block=False,
-        priority=3,
-        extensions=[ReplyMergeExtension()],
-    )
-    for shortcut in meme.shortcuts:
-        meme_matcher_gif.shortcut(
-            shortcut.key,
-            arguments=shortcut.args,
-            prefix=True,
-            humanized=shortcut.humanized,
-        )
-    matchers.append(meme_matcher_gif)
-    
     async def _meme_matcher(
         bot: Bot,
         event: Event,
@@ -377,7 +336,6 @@ def create_matcher(meme: MemeInfo):
         session: Uninfo,
         interface: QryItrface,
         alc_matches: AlcMatches,
-        force_gif: bool = False,
     ):
         if not meme_manager.check(user_id, meme.key):
             logger.info(f"用户 {user_id} 表情 {meme.key} 被禁用")
@@ -527,16 +485,12 @@ def create_matcher(meme: MemeInfo):
                 
         matcher.stop_propagation()
         await process(
-            bot, event, state, matcher, session, meme, images, texts, users, args, force_gif=force_gif
+            bot, event, state, matcher, session, meme, images, texts, users, args
         )
-        
+
     @meme_matcher.handle()
     async def _(bot: Bot, event: Event, state: T_State, matcher: Matcher, user_id: UserId, session: Uninfo, interface: QryItrface, alc_matches: AlcMatches):
         await _meme_matcher(bot, event, state, matcher, user_id, session, interface, alc_matches)
-
-    @meme_matcher_gif.handle()
-    async def _(bot: Bot, event: Event, state: T_State, matcher: Matcher, user_id: UserId, session: Uninfo, interface: QryItrface, alc_matches: AlcMatches):
-        await _meme_matcher(bot, event, state, matcher, user_id, session, interface, alc_matches, force_gif=True)
 
 def create_matchers():
     for meme in meme_manager.get_memes():

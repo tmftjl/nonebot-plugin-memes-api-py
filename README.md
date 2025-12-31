@@ -30,7 +30,7 @@ _✨ [Nonebot2](https://github.com/nonebot/nonebot2) 表情包制作插件 调�
 
 - **屏蔽词**：内置屏蔽词功能，过滤不适合出现在中文互联网中的词汇（我自己写的，可能不够全面。由于敏感，屏蔽词表另外放在我的下载站上，将自动下载和检查更新）。这是考虑到举牌系列表情可以用于输出含有敏感词汇的图片导致封号。词表位置可在 `config.py` 中修改
 - **禁用机制**：全局禁用采用强制禁用方式而非白名单，禁用数据存储路径为 `./data` 目录下
-- **表情转换**：在 QQ 中以表情包形式发送表情，发送的表情看上去会更小，看起来舒服；或使用resize选项缩放来使图片变得更小，二选一。resize模式时，前缀前面加个gif可以强制返回gif，如前缀为bq时，gifbq xxx
+- **GIF 表情包**：可选择将表情转换为 GIF 格式发送，在 QQ 中以表情包形式显示，看起来更精致
 - **防止刷屏提醒** 以一定概率随表情发送 请勿刷屏 之类的消息，概率可在 `config.py` 中修改。注意随机表情也需要前缀
 - **更好的随机表情** 随机表情不需要传入参数，缺失时自动选择默认文字和头像
 - **稳定下载**：使用pycurl保证图片下载，绕过往往出现的ssl问题
@@ -39,10 +39,8 @@ _✨ [Nonebot2](https://github.com/nonebot/nonebot2) 表情包制作插件 调�
 
 ```python
 memes_config = get_plugin_config(Config)
-ban_path = '..' # 默认在Bot文件夹外 可改为 ./data/ban
-use_gif = False  # 是否使用gif表情
-resize_image = True  # 是否缩放图片
-resize_image_size = 360  # 缩放图片的最大尺寸
+ban_path = '.data/ban' # 默认在Bot文件夹 data 目录下
+use_gif = False  # 是否将表情转换为 GIF 格式发送
 notice_prob = 0.1  # 防刷屏提醒概率
 use_ban_word = True  # 是否启用敏感词过滤
 ```
