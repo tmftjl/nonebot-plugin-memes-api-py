@@ -1,6 +1,6 @@
 from nonebot.matcher import Matcher
 from nonebot.permission import SUPERUSER, Permission
-from nonebot_plugin_alconna import Alconna, Args, on_alconna
+from nonebot_plugin_alconna import Alconna, Args, CommandMeta, on_alconna
 from nonebot_plugin_uninfo import Uninfo
 
 from ..manager import MemeMode, meme_manager
@@ -18,28 +18,28 @@ PERM_GLOBAL = SUPERUSER
 
 
 block_matcher = on_alconna(
-    Alconna("禁用表情", Args["meme_name", str]),
+    Alconna("禁用表情", Args["meme_name", str], meta=CommandMeta(compact=True)),
     block=True,
     priority=11,
     use_cmd_start=True,
     permission=PERM_EDIT,
 )
 unblock_matcher = on_alconna(
-    Alconna("启用表情", Args["meme_name", str]),
+    Alconna("启用表情", Args["meme_name", str], meta=CommandMeta(compact=True)),
     block=True,
     priority=11,
     use_cmd_start=True,
     permission=PERM_EDIT,
 )
 block_gl_matcher = on_alconna(
-    Alconna("全局禁用表情", Args["meme_name", str]),
+    Alconna("全局禁用表情", Args["meme_name", str], meta=CommandMeta(compact=True)),
     block=True,
     priority=11,
     use_cmd_start=True,
     permission=PERM_GLOBAL,
 )
 unblock_gl_matcher = on_alconna(
-    Alconna("全局启用表情", Args["meme_name", str]),
+    Alconna("全局启用表情", Args["meme_name", str], meta=CommandMeta(compact=True)),
     block=True,
     priority=11,
     use_cmd_start=True,
