@@ -386,7 +386,7 @@ def create_matcher(meme: MemeInfo):
             # 检查 users 中是否有白名单用户
             whitelist_indices = [
                 i for i, user in enumerate(users)
-                if protection_manager.is_in_whitelist(user.user_id)
+                if protection_manager.is_in_whitelist(user.id)
             ]
 
             if whitelist_indices:
