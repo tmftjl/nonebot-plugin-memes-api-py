@@ -383,18 +383,14 @@ def create_matcher(meme: MemeInfo):
 
         # 白名单保护功能：如果 @ 了白名单用户，把白名单用户换成发送者
         if protection_manager.is_protected(meme.key):
-            logger.info(f"表情 {meme.key} 在保护列表中")
             sender_id = session.user.id
             # 检查 users 中是否有白名单用户（排除发送者自己）
             whitelist_indices = [
                 i for i, user in enumerate(users)
                 if user.id != sender_id and protection_manager.is_in_whitelist(user.id)
             ]
-            logger.info(f"发送者: {sender_id}, 用户列表: {[user.id for user in users]}")
-            logger.info(f"白名单索引（排除发送者）: {whitelist_indices}")
 
             if whitelist_indices:
-                logger.info(f"检测到白名单用户，将其替换为发送者")
                 # 将第一个白名单用户替换为发送者
                 idx = whitelist_indices[0]
                 sender_user = session.user
