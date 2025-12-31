@@ -381,36 +381,28 @@ def create_matcher(meme: MemeInfo):
         ):
             texts = meme.params_type.default_texts
 
-        # 白名单保护功能：如果 @ 了白名单用户，反转目标
+        # 白名单保护功能：如果 @ 了白名单用户，把白名单用户换成发送者
         if protection_manager.is_protected(meme.key):
             logger.info(f"表情 {meme.key} 在保护列表中")
-            # 检查 users 中是否有白名单用户
+            sender_id = session.user.id
+            # 检查 users 中是否有白名单用户（排除发送者自己）
             whitelist_indices = [
                 i for i, user in enumerate(users)
-                if protection_manager.is_in_whitelist(user.id)
+                if user.id != sender_id and protection_manager.is_in_whitelist(user.id)
             ]
-            logger.info(f"用户列表: {[user.id for user in users]}")
-            logger.info(f"白名单索引: {whitelist_indices}")
+            logger.info(f"发送者: {sender_id}, 用户列表: {[user.id for user in users]}")
+            logger.info(f"白名单索引（排除发送者）: {whitelist_indices}")
 
             if whitelist_indices:
-                logger.info(f"检测到白名单用户，执行保护逻辑")
-                # 对于单图表情，将白名单用户替换为发送者
-                if meme.params_type.min_images == 1 and meme.params_type.max_images == 1:
-                    if whitelist_indices[0] < len(images):
-                        # 用发送者的头像替换白名单用户
-                        sender_user = session.user
-                        if image_url := sender_user.avatar:
-                            images[whitelist_indices[0]] = Image(url=image_url)
-                        if (member := session.member) and member.nick:
-                            sender_user.nick = member.nick
-                        users[whitelist_indices[0]] = sender_user
-
-                # 对于双图表情，反转顺序
-                elif meme.params_type.min_images == 2 and meme.params_type.max_images == 2:
-                    if len(images) == 2 and len(users) == 2:
-                        logger.info(f"双图表情，执行反转")
-                        images.reverse()
-                        users.reverse()
+                logger.info(f"检测到白名单用户，将其替换为发送者")
+                # 将第一个白名单用户替换为发送者
+                idx = whitelist_indices[0]
+                sender_user = session.user
+                if image_url := sender_user.avatar:
+                    images[idx] = Image(url=image_url)
+                if (member := session.member) and member.nick:
+                    sender_user.nick = member.nick
+                users[idx] = sender_user
 
         @waiter(waits=["message"], keep_session=True)
         async def get_texts(uni_msg: UniMsg):
