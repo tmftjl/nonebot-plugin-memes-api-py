@@ -6,6 +6,7 @@ from typing import Any, Union
 from nonebot.permission import SUPERUSER
 
 from arclet.alconna import config as alc_config
+from arclet.alconna.manager import command_manager
 import httpx
 from nonebot import get_driver
 from nonebot.adapters import Bot, Event
@@ -42,7 +43,9 @@ from ..utils import NetworkError
 from .utils import UserId, load_sensitive_words, image_fetch_pucurl
 from PIL import Image as PILImage
 
-alc_config.command_max_count += 1000
+# 增加 Alconna 命令数量上限以支持大量表情
+# 每个表情创建 2 个 matcher（普通 + gif），所以需要足够的空间
+alc_config.command_max_count += 2000
 
 
 import io
@@ -540,8 +543,23 @@ def create_matchers():
 
 
 def destroy_matchers():
+    # 获取当前所有注册的 Alconna 命令
+    current_commands = list(command_manager.get_commands())
+
     for matcher in matchers:
+        # 从 Alconna command_manager 中注销命令
+        # AlconnaMatcher 的 command 属性保存了 Alconna 实例
+        try:
+            # 尝试获取 matcher 关联的 Alconna 命令
+            if hasattr(matcher, "command") and matcher.command in current_commands:
+                command_manager.delete(matcher.command)
+                logger.debug(f"Deleted Alconna command: {matcher.command}")
+        except Exception as e:
+            logger.warning(f"Failed to delete Alconna command: {e}")
+
+        # 销毁 NoneBot matcher
         matcher.destroy()
+
     matchers.clear()
 
 
