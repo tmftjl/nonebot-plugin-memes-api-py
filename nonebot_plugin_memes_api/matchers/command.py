@@ -191,6 +191,11 @@ async def handle_params(
                                 user.nick = member.nick
                     except (NotImplementedError, NetworkError, AdapterException):
                         pass
+                    except RuntimeError as e:
+                        if "Cannot call \"send\"" in str(e):
+                            logger.error("WebSocket 连接已断开，尝试降级处理")
+                        else:
+                            raise
                 if not user:
                     user = await interface.get_user(msg_seg.target)
                 if user:
@@ -199,6 +204,11 @@ async def handle_params(
                     users.append(user)
             except NotImplementedError:
                 await matcher.finish("当前平台可能不支持获取用户信息")
+            except RuntimeError as e:
+                if "Cannot call \"send\"" in str(e):
+                    logger.error("WebSocket 连接异常，请稍后重试")
+                    await matcher.finish("网络连接不稳定，请稍后重试")
+                raise
             except (NetworkError, AdapterException):
                 logger.warning(traceback.format_exc())
                 await matcher.finish("用户信息获取出错，请稍后再试")
@@ -216,6 +226,11 @@ async def handle_params(
                         users.append(user)
                 except NotImplementedError:
                     await matcher.finish("当前平台可能不支持获取用户信息")
+                except RuntimeError as e:
+                    if "Cannot call \"send\"" in str(e):
+                        logger.error("WebSocket 连接异常，请稍后重试")
+                        await matcher.finish("网络连接不稳定，请稍后重试")
+                    raise
                 except (NetworkError, AdapterException):
                     logger.warning(traceback.format_exc())
                     await matcher.finish("用户信息获取出错，请检查用户 id 或稍后再试")
@@ -351,9 +366,14 @@ def create_matcher(meme: MemeInfo):
                 args[option] = option_result.value
 
         meme_params: list[T_MemeParams] = list(alc_matches.query(meme_params_key, ()))
-        texts, images, users = await handle_params(
-            matcher, session, interface, meme_params
-        )
+
+        try:
+            texts, images, users = await handle_params(
+                matcher, session, interface, meme_params
+            )
+        except Exception as e:
+            logger.error(f"处理参数时发生错误: {e}", exc_info=True)
+            await matcher.finish("参数处理失败，请稍后重试")
 
         # 当所需图片数为 2 且已指定图片数为 1 时，使用发送者的头像作为第一张图
         if meme.params_type.min_images == 2 and len(images) == 1:
@@ -399,26 +419,6 @@ def create_matcher(meme: MemeInfo):
                 if (member := session.member) and member.nick:
                     sender_user.nick = member.nick
                 users[idx] = sender_user
-
-        @waiter(waits=["message"], keep_session=True)
-        async def get_texts(uni_msg: UniMsg):
-            uni_texts = [seg for seg in uni_msg if isinstance(seg, Text)]
-            uni_texts = chain.from_iterable(
-                [seg.split() for seg in uni_texts if seg.text]
-            )
-            return [seg.text for seg in uni_texts if seg.text]
-
-        @waiter(waits=["message"], keep_session=True)
-        async def get_images(uni_msg: UniMsg):
-            uni_segs = chain.from_iterable(
-                list(msg) for msg in uni_msg.include(Image, At, Text).split()
-            )
-            params: list[T_MemeParams] = list(uni_segs)
-            _, new_images, new_names = await handle_params(matcher, session, interface, params)
-            for i in range(len(new_names)):
-                if i < len(new_images):
-                    new_images[i].name = new_names[i]
-            return new_images
         
         policy = memes_config.memes_params_mismatch_policy
 
@@ -432,7 +432,7 @@ def create_matcher(meme: MemeInfo):
             if meme.params_type.min_images != meme.params_type.max_images
             else str(meme.params_type.min_images)
         )
-        
+
         if len(texts) < meme.params_type.min_texts:
             msg = f"文字数量不符，应为 {text_range}，实际传入 {len(texts)}"
             if policy.too_few_text == "ignore":
@@ -444,6 +444,14 @@ def create_matcher(meme: MemeInfo):
                 await matcher.finish(msg)
 
             elif policy.too_few_text == "get":
+                @waiter(waits=["message"], keep_session=True)
+                async def get_texts(uni_msg: UniMsg):
+                    uni_texts = [seg for seg in uni_msg if isinstance(seg, Text)]
+                    uni_texts = chain.from_iterable(
+                        [seg.split() for seg in uni_texts if seg.text]
+                    )
+                    return [seg.text for seg in uni_texts if seg.text]
+
                 while len(texts) < meme.params_type.min_texts:
                     min = meme.params_type.min_texts - len(texts)
                     max = meme.params_type.max_texts - len(texts)
@@ -479,11 +487,27 @@ def create_matcher(meme: MemeInfo):
                 await matcher.finish(msg)
 
             elif policy.too_few_image == "get":
+                @waiter(waits=["message"], keep_session=True)
+                async def get_images(uni_msg: UniMsg):
+                    try:
+                        uni_segs = chain.from_iterable(
+                            list(msg) for msg in uni_msg.include(Image, At, Text).split()
+                        )
+                        params: list[T_MemeParams] = list(uni_segs)
+                        _, new_images, new_names = await handle_params(matcher, session, interface, params)
+                        for i in range(len(new_names)):
+                            if i < len(new_images):
+                                new_images[i].name = new_names[i]
+                        return new_images
+                    except Exception as e:
+                        logger.error(f"获取图片时发生错误: {e}", exc_info=True)
+                        return []
+
                 while len(images) < meme.params_type.min_images:
                     min = meme.params_type.min_images - len(images)
                     max = meme.params_type.max_images - len(images)
                     num = f"{min} ~ {max}" if min != max else str(min)
-                    await matcher.send(f"请继续发送 {num} 张图片/@群友/“自己”以使用头像")
+                    await matcher.send(f'请继续发送 {num} 张图片/@群友/"自己"以使用头像')
                     resp = await get_images.wait(timeout=30)
                     if resp is None:
                         await matcher.finish()
@@ -502,7 +526,7 @@ def create_matcher(meme: MemeInfo):
 
             elif policy.too_much_image == "drop":
                 images = images[: meme.params_type.max_images]
-                
+
         matcher.stop_propagation()
         await process(
             bot, event, state, matcher, session, meme, images, texts, users, args
