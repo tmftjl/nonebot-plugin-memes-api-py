@@ -1,6 +1,7 @@
 import asyncio
 import random
 import traceback
+from asyncio import CancelledError
 from itertools import chain
 from typing import Any, Union
 from nonebot.permission import SUPERUSER
@@ -98,9 +99,11 @@ async def process(
     images: list[Image],
     texts: list[str],
     users: list[User],
-    args: dict[str, Any] = {},
+    args: dict[str, Any] | None = None,
     show_info: bool = False,
 ):
+    if args is None:
+        args = {}
     image_contents: list[bytes] = []
     
     for txt_seq in range(len(texts)):
@@ -563,10 +566,15 @@ def destroy_matchers():
 
 
 random_matcher = on_alconna(
-    Alconna([prefix + "随机表情" for prefix in prefixes], arg_meme_params),
+    Alconna(
+        prefixes,
+        "随机表情",
+        arg_meme_params,
+        meta=CommandMeta(keep_crlf=True, compact=True, fuzzy_match=True),
+    ),
     block=False,
     priority=3,
-    use_cmd_start=True,
+    use_cmd_start=False,
     extensions=[ReplyMergeExtension()],
 )
 
@@ -583,23 +591,41 @@ async def _(
     alc_matches: AlcMatches,
 ):
     meme_params: list[T_MemeParams] = list(alc_matches.query(meme_params_key, ()))
-    texts, images, users = await handle_params(matcher, session, interface, meme_params)
+    try:
+        texts, images, users = await handle_params(matcher, session, interface, meme_params)
+    except CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"处理随机表情参数时发生错误: {e}", exc_info=True)
+        await matcher.finish("参数处理失败，请稍后重试")
+
+    memes = meme_manager.get_memes()
+    if not memes:
+        await matcher.finish("表情库尚未初始化或初始化失败，请稍后再试（可能是生成器服务未启动或表情被全部禁用）")
 
     available_memes = [
         meme
-        for meme in meme_manager.get_memes()
+        for meme in memes
         if meme_manager.check(user_id, meme.key)
         and (
             (meme.params_type.min_images - 1 <= len(images) <= meme.params_type.max_images)
             and (meme.params_type.min_texts - 1 <= len(texts) <= meme.params_type.max_texts)
         )
     ]
-            
+
+    if not available_memes:
+        await matcher.finish(
+            f"没有找到符合条件的表情（当前输入：{len(images)}图 {len(texts)}字）。"
+            "可尝试附带 1 张图或 1 段文字，或检查表情是否被禁用/白名单模式。"
+        )
 
     random_meme = random.choice(available_memes)
     
     if len(texts) == random_meme.params_type.min_texts - 1:
-        texts.append(random_meme.params_type.default_texts[0])
+        if random_meme.params_type.default_texts:
+            texts.append(random_meme.params_type.default_texts[0])
+        else:
+            texts.append("")
         
     if len(images) == random_meme.params_type.min_images - 1:
         user = session.user
@@ -608,19 +634,25 @@ async def _(
         if (member := session.member) and member.nick:
             user.nick = member.nick
         users.append(user)
-    
-    await process(
-        bot,
-        event,
-        state,
-        matcher,
-        session,
-        random_meme,
-        images,
-        texts,
-        users,
-        show_info=memes_config.memes_random_meme_show_info,
-    )
+
+    try:
+        await process(
+            bot,
+            event,
+            state,
+            matcher,
+            session,
+            random_meme,
+            images,
+            texts,
+            users,
+            show_info=memes_config.memes_random_meme_show_info,
+        )
+    except CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"随机表情生成失败: {e}", exc_info=True)
+        await matcher.finish("生成失败，请稍后再试（检查生成器服务/网络/图片下载）")
 
 refresh_matcher = on_alconna("更新表情", aliases={"刷新表情"}, permission=SUPERUSER, block=True, priority=3)
 
