@@ -59,6 +59,15 @@ except Exception:  # pragma: no cover
     V12Message = None  # type: ignore[assignment]
     V12MessageSegment = None  # type: ignore[assignment]
 
+try:
+    from nonebot.adapters.qq import Bot as QQOfficialBot
+    from nonebot.adapters.qq import Message as QQOfficialMessage
+    from nonebot.adapters.qq import MessageSegment as QQOfficialMessageSegment
+except Exception:  # pragma: no cover
+    QQOfficialBot = None  # type: ignore[assignment]
+    QQOfficialMessage = None  # type: ignore[assignment]
+    QQOfficialMessageSegment = None  # type: ignore[assignment]
+
 
 MEME_TRIGGER_KEY = "_memes_trigger"
 MEME_MSG_KEY = "_memes_msg"
@@ -398,6 +407,11 @@ async def _send_image(matcher: Matcher, bot: Bot, event: Event, img: bytes, text
         resp = await bot.upload_file(type="data", name="memes", data=img)
         file_id = resp["file_id"]
         await matcher.finish(V12Message(text) + V12MessageSegment.image(file_id))
+
+    if QQOfficialBot is not None and isinstance(bot, QQOfficialBot):
+        assert QQOfficialMessage is not None and QQOfficialMessageSegment is not None
+        msg = QQOfficialMessage(text) + QQOfficialMessageSegment.file_image(img)
+        await matcher.finish(msg)
 
     if not text:
         text = "已生成图片，但当前适配器不支持发送图片"
