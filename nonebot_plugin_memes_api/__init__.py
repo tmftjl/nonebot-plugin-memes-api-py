@@ -1,14 +1,13 @@
 from nonebot import require
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
-require("nonebot_plugin_alconna")
 require("nonebot_plugin_waiter")
 require("nonebot_plugin_uninfo")
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_orm")
 
-from . import matchers as matchers
 from .config import Config, memes_config, ban_path
+from . import native_matchers as native_matchers
 
 memes_prefixes = memes_config.memes_command_prefixes
 memes_prefix = memes_prefixes[0] if memes_prefixes else ""
@@ -53,6 +52,6 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/noneplugin/nonebot-plugin-memes",
     config=Config,
     supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_alconna", "nonebot_plugin_uninfo"
+        "nonebot_plugin_uninfo"
     ),
 )
