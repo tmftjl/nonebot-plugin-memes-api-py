@@ -300,9 +300,10 @@ async def extract_inputs(
     interface: QryItrface,
     meme: Optional[MemeInfo],
     msg: Message,
-) -> tuple[list[str], list[bytes]]:
+) -> tuple[list[str], list[bytes], list[Optional[str]]]:
     texts: list[str] = []
     images: list[bytes] = []
+    image_user_ids: list[Optional[str]] = []  # 记录每个图片对应的用户ID
 
     reply_has_image = False
     try:
@@ -314,6 +315,7 @@ async def extract_inputs(
                     data = await _download_image_from_segment(img_seg)
                     if data:
                         images.append(data)
+                        image_user_ids.append(None)  # 回复中的图片没有对应用户ID
                         reply_has_image = True
             elif isinstance(reply_msg, Message):
                 for seg in reply_msg:
@@ -321,6 +323,7 @@ async def extract_inputs(
                         data = await _download_image_from_segment(seg)
                         if data:
                             images.append(data)
+                            image_user_ids.append(None)  # 回复中的图片没有对应用户ID
                             reply_has_image = True
     except Exception:
         pass
@@ -346,11 +349,13 @@ async def extract_inputs(
             avatar = await _avatar_bytes_of(matcher, session, interface, str(target))
             if avatar:
                 images.append(avatar)
+                image_user_ids.append(str(target))  # 记录@的用户ID
 
         elif seg_type == "image":
             data = await _download_image_from_segment(seg)
             if data:
                 images.append(data)
+                image_user_ids.append(None)  # 直接发送的图片没有对应用户ID
 
         elif seg.is_text():
             for token in _split_text(str(seg)):
@@ -360,11 +365,13 @@ async def extract_inputs(
                     )
                     if avatar:
                         images.append(avatar)
+                        image_user_ids.append(token[1:])  # 记录@的用户ID
                     continue
 
                 if token == "自己":
                     if session.user.avatar:
                         images.append(await download_url(session.user.avatar))
+                        image_user_ids.append(str(session.user.id))  # 记录自己的ID
                     continue
 
                 if token:
@@ -377,6 +384,7 @@ async def extract_inputs(
             and session.user.avatar
         ):
             images.insert(0, await download_url(session.user.avatar))
+            image_user_ids.insert(0, str(session.user.id))  # 发送者的头像
 
         if (
             memes_config.memes_use_sender_when_no_image
@@ -385,6 +393,7 @@ async def extract_inputs(
             and session.user.avatar
         ):
             images.append(await download_url(session.user.avatar))
+            image_user_ids.append(str(session.user.id))  # 发送者的头像
 
         if (
             memes_config.memes_use_default_when_no_text
@@ -393,7 +402,48 @@ async def extract_inputs(
         ):
             texts = list(meme.params_type.default_texts)
 
-    return texts, images
+    return texts, images, image_user_ids
+
+
+async def apply_protection(
+    meme_key: str,
+    images: list[bytes],
+    image_user_ids: list[Optional[str]],
+    sender_id: str,
+    sender_avatar: Optional[str],
+) -> list[bytes]:
+    """
+    应用表情保护逻辑
+    - 如果表情在保护列表中，且某个图片对应的用户在白名单中
+    - 则将该用户的头像替换为发送者的头像（攻击者的头像）
+
+    Args:
+        meme_key: 表情key
+        images: 图片列表
+        image_user_ids: 每个图片对应的用户ID（可能为None）
+        sender_id: 发送者ID
+        sender_avatar: 发送者头像URL
+
+    Returns:
+        处理后的图片列表
+    """
+    # 只有在保护表情列表中的表情才需要检查
+    if not protection_manager.is_protected(meme_key):
+        return images
+
+    # 如果没有发送者头像，无法进行保护
+    if not sender_avatar:
+        return images
+
+    # 检查每个图片对应的用户是否在白名单中
+    protected_images = images.copy()
+    for i, user_id in enumerate(image_user_ids):
+        if user_id and protection_manager.is_in_whitelist(user_id):
+            # 被保护的用户，用发送者的头像替换
+            sender_avatar_bytes = await download_url(sender_avatar)
+            protected_images[i] = sender_avatar_bytes
+
+    return protected_images
 
 
 async def _send_image(matcher: Matcher, bot: Bot, event: Event, img: bytes, text: str):
@@ -951,7 +1001,7 @@ async def _random(
     interface: QryItrface,
     arg: Message = CommandArg(),
 ):
-    base_texts, base_images = await extract_inputs(
+    base_texts, base_images, _ = await extract_inputs(
         bot, event, matcher, session, interface, None, arg
     )
 
@@ -959,10 +1009,6 @@ async def _random(
     user_key = get_user_id(session)
     for meme in meme_manager.get_memes():
         if not meme_manager.check(user_key, meme.key):
-            continue
-        if protection_manager.is_protected(meme.key) and not protection_manager.is_in_whitelist(
-            str(session.user.id)
-        ):
             continue
         images_num = len(base_images)
         texts_num = len(base_texts)
@@ -985,7 +1031,13 @@ async def _random(
         await matcher.finish("没有找到符合条件的表情")
 
     meme = random.choice(candidates)
-    texts, images = await extract_inputs(bot, event, matcher, session, interface, meme, arg)
+    texts, images, image_user_ids = await extract_inputs(bot, event, matcher, session, interface, meme, arg)
+
+    # 应用表情保护逻辑
+    images = await apply_protection(
+        meme.key, images, image_user_ids, str(session.user.id), session.user.avatar
+    )
+
     try:
         result = await generate_meme(meme.key, images, texts, args={})
         await record_meme_generation(session, meme.key)
@@ -1019,13 +1071,13 @@ async def _meme(
     if not meme_manager.check(user_key, meme.key):
         await matcher.finish("表情已被禁用")
 
-    if protection_manager.is_protected(meme.key) and not protection_manager.is_in_whitelist(
-        str(session.user.id)
-    ):
-        await matcher.finish("该表情已开启保护，仅白名单用户可使用")
-
-    texts, images = await extract_inputs(
+    texts, images, image_user_ids = await extract_inputs(
         bot, event, matcher, session, interface, meme, msg
+    )
+
+    # 应用表情保护逻辑
+    images = await apply_protection(
+        meme.key, images, image_user_ids, str(session.user.id), session.user.avatar
     )
 
     try:
