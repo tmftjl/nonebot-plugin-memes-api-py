@@ -410,7 +410,10 @@ async def _send_image(matcher: Matcher, bot: Bot, event: Event, img: bytes, text
 
     if QQOfficialBot is not None and isinstance(bot, QQOfficialBot):
         assert QQOfficialMessage is not None and QQOfficialMessageSegment is not None
-        msg = QQOfficialMessage(text) + QQOfficialMessageSegment.file_image(img)
+        msg = QQOfficialMessage()
+        if text:
+            msg += QQOfficialMessageSegment.text(text)
+        msg += QQOfficialMessageSegment.file_image(img)
         await matcher.finish(msg)
 
     if not text:
