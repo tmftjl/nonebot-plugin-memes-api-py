@@ -409,7 +409,6 @@ async def apply_protection(
     meme_key: str,
     images: list[bytes],
     image_user_ids: list[Optional[str]],
-    sender_id: str,
     sender_avatar: Optional[str],
 ) -> list[bytes]:
     """
@@ -421,7 +420,6 @@ async def apply_protection(
         meme_key: 表情key
         images: 图片列表
         image_user_ids: 每个图片对应的用户ID（可能为None）
-        sender_id: 发送者ID
         sender_avatar: 发送者头像URL
 
     Returns:
@@ -435,13 +433,35 @@ async def apply_protection(
     if not sender_avatar:
         return images
 
-    # 检查每个图片对应的用户是否在白名单中
+    # 边界检查：确保长度一致
+    if len(images) != len(image_user_ids):
+        logger.warning(
+            f"表情保护失败：images 和 image_user_ids 长度不一致 "
+            f"({len(images)} vs {len(image_user_ids)})"
+        )
+        return images
+
+    # 先检查是否有需要保护的用户
+    indices_to_replace = [
+        i for i, user_id in enumerate(image_user_ids)
+        if user_id and protection_manager.is_in_whitelist(user_id)
+    ]
+
+    # 如果没有需要保护的用户，直接返回
+    if not indices_to_replace:
+        return images
+
+    # 只下载一次发送者头像
+    try:
+        sender_avatar_bytes = await download_url(sender_avatar)
+    except Exception as e:
+        logger.warning(f"表情保护失败：无法下载发送者头像: {e}")
+        return images  # 降级处理，返回原图片列表
+
+    # 替换所有需要保护的用户头像
     protected_images = images.copy()
-    for i, user_id in enumerate(image_user_ids):
-        if user_id and protection_manager.is_in_whitelist(user_id):
-            # 被保护的用户，用发送者的头像替换
-            sender_avatar_bytes = await download_url(sender_avatar)
-            protected_images[i] = sender_avatar_bytes
+    for i in indices_to_replace:
+        protected_images[i] = sender_avatar_bytes
 
     return protected_images
 
@@ -1035,7 +1055,7 @@ async def _random(
 
     # 应用表情保护逻辑
     images = await apply_protection(
-        meme.key, images, image_user_ids, str(session.user.id), session.user.avatar
+        meme.key, images, image_user_ids, session.user.avatar
     )
 
     try:
@@ -1077,7 +1097,7 @@ async def _meme(
 
     # 应用表情保护逻辑
     images = await apply_protection(
-        meme.key, images, image_user_ids, str(session.user.id), session.user.avatar
+        meme.key, images, image_user_ids, session.user.avatar
     )
 
     try:
