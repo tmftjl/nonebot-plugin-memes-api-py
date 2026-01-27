@@ -21,8 +21,7 @@ class MemeMode(IntEnum):
 
 class MemeConfig(BaseModel):
     mode: MemeMode = MemeMode.BLACK
-    white_list: list[str] = []
-    black_list: list[str] = []
+    disabled_groups: list[str] = []  # 禁用该表情的群组列表
 
     if PYDANTIC_V2:
         from pydantic import field_serializer
@@ -64,23 +63,33 @@ class MemeManager:
         return list(self.__meme_dict.values())
 
     def block(self, user_id: str, meme_key: str):
+        """禁用表情（群组级别）"""
         config = self.__meme_config[meme_key]
-        if config.mode == MemeMode.BLACK and user_id not in config.black_list:
-            config.black_list.append(user_id)
+        # 如果表情已被全局禁用，不允许群组再次禁用
+        if config.mode == MemeMode.WHITE:
+            return False
+        # 添加到禁用列表
+        if user_id not in config.disabled_groups:
+            config.disabled_groups.append(user_id)
             self.__dump()
             return True
         return False
 
     def unblock(self, user_id: str, meme_key: str):
+        """启用表情（群组级别）"""
         config = self.__meme_config[meme_key]
+        # 如果表情已被全局禁用，不允许群组启用
         if config.mode == MemeMode.WHITE:
             return False
-        if config.mode == MemeMode.BLACK and user_id in config.black_list:
-            config.black_list.remove(user_id)
-        self.__dump()
-        return True
-    
+        # 从禁用列表移除
+        if user_id in config.disabled_groups:
+            config.disabled_groups.remove(user_id)
+            self.__dump()
+            return True
+        return False
+
     def get_black_list(self) -> list[str]:
+        """获取全局禁用的表情列表"""
         black_list = []
         for key, config in self.__meme_config.items():
             if config.mode == MemeMode.WHITE:
@@ -126,18 +135,17 @@ class MemeManager:
         return list(result.values())
 
     def check(self, user_id: str, meme_key: str) -> bool:
+        """检查表情是否可用"""
         if meme_key not in self.__meme_config:
             return False
         config = self.__meme_config[meme_key]
-        if config.mode == MemeMode.BLACK:
-            if user_id in config.black_list:
-                return False
-            return True
-        elif config.mode == MemeMode.WHITE:
-            if user_id in config.white_list:
-                return True
+        # 如果表情被全局禁用，则禁用
+        if config.mode == MemeMode.WHITE:
             return False
-        return False
+        # 如果表情在群组禁用列表中，则禁用
+        if user_id in config.disabled_groups:
+            return False
+        return True
 
     def __load(self):
         raw_list: dict[str, Any] = {}

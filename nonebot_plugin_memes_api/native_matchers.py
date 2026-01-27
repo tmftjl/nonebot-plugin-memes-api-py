@@ -543,7 +543,7 @@ unblock_cmd = on_command("启用表情", block=True, priority=11)
 block_gl_cmd = on_command("全局禁用表情", block=True, priority=11, permission=SUPERUSER)
 unblock_gl_cmd = on_command("全局启用表情", block=True, priority=11, permission=SUPERUSER)
 black_list_cmd = on_command(
-    "黑名单", aliases={"禁用列表", "黑名单列表"}, block=True, priority=11, permission=SUPERUSER
+    "禁用列表", aliases={"全局禁用列表"}, block=True, priority=11, permission=SUPERUSER
 )
 
 random_cmd = on_command("随机表情", block=True, priority=3)
@@ -627,7 +627,7 @@ async def _help(bot: Bot, event: Event, matcher: Matcher, session: Uninfo):
     text = (
         f"触发方式：关键词{prefixes} 表情名 图片/文字/@某人\n"
         f"例：{hint_prefix}卡提举牌 抽我\n"
-        "发送“表情详情+关键词”查看预览\n"
+        "发送【表情详情+关键词】查看预览\n"
         "群管可 启用/禁用表情+表情名\n"
         "目前支持的表情列表："
     )
@@ -641,32 +641,33 @@ async def _usage_help(matcher: Matcher):
     memes_prefix = prefixes[0] if prefixes else ""
     await matcher.finish(
         "- 表情列表\n"
-        "发送 “表情包制作” 查看表情列表\n"
+        "发送【表情包制作】查看表情列表\n"
         "- 表情详情\n"
-        "发送 “表情详情 + 表情名/关键词” 查看表情详细信息和表情预览\n"
+        "发送【表情详情 + 表情名/关键词】查看表情详细信息和表情预览\n"
         "- 表情搜索\n"
-        "发送 “表情搜索 + 关键词” 查找相关的表情\n"
+        "发送【表情搜索 + 关键词】查找相关的表情\n"
         "- 表情包开关\n"
-        "- “超级用户” 和 “管理员” 可以启用或禁用某些表情包\n"
+        "- 群管可以启用或禁用本群的表情\n"
         "发送 启用表情/禁用表情 表情名/关键词，如：禁用表情 摸\n"
-        "- “超级用户” 可以设置某个表情包的管控模式（黑名单/白名单）\n"
-        "发送 全局启用表情 表情名/关键词 可将表情设为黑名单模式；\n"
-        "发送 全局禁用表情 表情名/关键词 可将表情设为白名单模式；\n"
+        "- 超级用户可以全局禁用/启用表情\n"
+        "发送 全局启用表情 表情名/关键词 可全局启用表情；\n"
+        "发送 全局禁用表情 表情名/关键词 可全局禁用表情；\n"
+        "发送 禁用列表 查看全局禁用的表情列表\n"
         "- 白名单保护（仅超级用户）\n"
-        "发送 “添加保护@用户” 或 “添加保护<QQ号>” 添加保护白名单\n"
-        "发送 “移除保护@用户” 或 “移除保护<QQ号>” 移除保护白名单\n"
-        "发送 “保护表情<表情名>” 添加保护表情\n"
-        "发送 “取消保护表情<表情名>” 移除保护表情\n"
-        "发送 “保护列表” 查看保护配置\n"
+        "发送【添加保护@用户】或【添加保护<QQ号>】添加保护白名单\n"
+        "发送【移除保护@用户】或【移除保护<QQ号>】移除保护白名单\n"
+        "发送【保护表情<表情名>】添加保护表情\n"
+        "发送【取消保护表情<表情名>】移除保护表情\n"
+        "发送【保护列表】查看保护配置\n"
         "- 表情使用\n"
-        f"发送 “{memes_prefix}关键词 + 图片/文字” 制作表情\n"
-        "可使用 “自己”、“@某人” 获取指定用户的头像作为图片\n"
-        "可使用 “@ + 用户id” 指定任意用户获取头像，如 “摸 @114514”\n"
+        f"发送【{memes_prefix}关键词 + 图片/文字】制作表情\n"
+        "可使用【自己】、【@某人】获取指定用户的头像作为图片\n"
+        "可使用【@ + 用户id】指定任意用户获取头像，如【摸 @114514】\n"
         "- 随机表情\n"
-        "发送 “随机表情 + 图片/文字” 可随机制作表情\n"
+        "发送【随机表情 + 图片/文字】可随机制作表情\n"
         "随机范围为 图片/文字 数量符合要求的表情\n"
         "- 表情调用统计\n"
-        "发送 “[我的][全局]<时间段>表情调用统计 [表情名]” 获取表情调用次数统计图\n"
+        "发送【[我的][全局]<时间段>表情调用统计 [表情名]】获取表情调用次数统计图\n"
     )
 
 
@@ -950,7 +951,7 @@ async def _statistics(
 
 @block_cmd.handle()
 async def _block(matcher: Matcher, session: Uninfo, arg: Message = CommandArg()):
-    if not (_is_superuser(session) or _can_edit(session)):
+    if not _can_edit(session):
         await matcher.finish("权限不足（需要群管或超级用户）")
     meme_name = arg.extract_plain_text().strip()
     if not meme_name:
@@ -961,12 +962,12 @@ async def _block(matcher: Matcher, session: Uninfo, arg: Message = CommandArg())
     user_key = get_user_id(session)
     if meme_manager.block(user_key, meme.key):
         await matcher.finish(f"表情 {meme.key} 禁用成功")
-    await matcher.finish(f"表情 {meme.key} 已被禁用或已在黑名单中")
+    await matcher.finish(f"表情 {meme.key} 已被禁用或已被全局禁用")
 
 
 @unblock_cmd.handle()
 async def _unblock(matcher: Matcher, session: Uninfo, arg: Message = CommandArg()):
-    if not (_is_superuser(session) or _can_edit(session)):
+    if not _can_edit(session):
         await matcher.finish("权限不足（需要群管或超级用户）")
     meme_name = arg.extract_plain_text().strip()
     if not meme_name:
@@ -977,31 +978,37 @@ async def _unblock(matcher: Matcher, session: Uninfo, arg: Message = CommandArg(
     user_key = get_user_id(session)
     if meme_manager.unblock(user_key, meme.key):
         await matcher.finish(f"表情 {meme.key} 启用成功")
-    await matcher.finish(f"表情 {meme.key} 已被主人禁用")
+    await matcher.finish(f"表情 {meme.key} 已被全局禁用，请联系超级用户启用")
 
 
 @block_gl_cmd.handle()
 async def _block_gl(matcher: Matcher, arg: Message = CommandArg()):
     meme_name = arg.extract_plain_text().strip()
+    if not meme_name:
+        matcher.block = False
+        await matcher.finish()
     meme = await find_meme(matcher, meme_name)
     meme_manager.change_mode(MemeMode.WHITE, meme.key)
-    await matcher.finish(f"表情 {meme.key} 已设为白名单模式")
+    await matcher.finish(f"表情 {meme.key} 已全局禁用")
 
 
 @unblock_gl_cmd.handle()
 async def _unblock_gl(matcher: Matcher, arg: Message = CommandArg()):
     meme_name = arg.extract_plain_text().strip()
+    if not meme_name:
+        matcher.block = False
+        await matcher.finish()
     meme = await find_meme(matcher, meme_name)
     meme_manager.change_mode(MemeMode.BLACK, meme.key)
-    await matcher.finish(f"表情 {meme.key} 已设为黑名单模式")
+    await matcher.finish(f"表情 {meme.key} 已全局启用")
 
 
 @black_list_cmd.handle()
 async def _black_list(matcher: Matcher):
     black_list = meme_manager.get_black_list()
     if not black_list:
-        await matcher.finish("当前没有禁用的表情")
-    await matcher.finish("当前禁用的表情列表：\n" + "\n".join(black_list))
+        await matcher.finish("当前没有全局禁用的表情")
+    await matcher.finish("当前全局禁用的表情列表：\n" + "\n".join(black_list))
 
 
 @refresh_cmd.handle()
